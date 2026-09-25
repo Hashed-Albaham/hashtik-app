@@ -1,4 +1,5 @@
 {
   "build": "cd \"/home/apk1\" && quarks build",
-  "build_release": "cd \"/home/apk1\" && quarks build --release"
+  "build_release": "cd \"/home/apk1\" && quarks build --release",
+  "run": "cd \"/home/apk1\" && quarks run"
 }
