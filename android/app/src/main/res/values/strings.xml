@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">HashTik Hotspot</string>
+    <string name="title_activity_main">HashTik Hotspot</string>
+    <string name="package_name">com.hashtik.hotspot</string>
+    <string name="custom_url_scheme">com.hashtik.hotspot</string>
+</resources>
