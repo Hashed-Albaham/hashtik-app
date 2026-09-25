@@ -1,26 +1,19 @@
 import { useState } from 'react';
 import './App.css';
 
-function App() {
-  // 1. بيانات الاتصال بالمايكروتك
+export default function App() {
   const [connection, setConnection] = useState({
     ip: '192.168.88.1',
-    port: '80', // منفذ HTTP للـ REST API
+    port: '80',
     username: 'admin',
     password: '',
-    path: 'flash/hotspot' // مسار الهوتسبوت (في v6 عادة تكون hotspot، وفي v7 المقبولة flash/hotspot)
+    path: 'flash/hotspot'
   });
 
-  // 2. الإعدادات الأساسية
   const [config, setConfig] = useState({
     mode: 'user_only',
-    rosVersion: '7', // يمكن اختيار 6 أو 7
+    rosVersion: '7',
     theme: 'dark',
-    chapEnabled: false,
-    enableSpeeds: true,
-    forceSpeedSelection: false,
-    updatesEnable: true,
-    announcementsEnabled: true,
     networkName: '🔴 شبكة جورية نت 🟢',
     welcomeText: 'مرحبا بكم في شبكة جورية نت .. سرعة عالية .. أداء مستقر',
     verseText: '( وَمَنْ يَتَّقِ اللَّهَ يَجْعَلْ لَهُ مَخْرَجًا وَيَرْزُقْهُ مِنْ حَيْثُ لا يَحْتَسِبُ )',
@@ -34,7 +27,6 @@ function App() {
     restLink: ''
   });
 
-  // 3. القوائم الديناميكية
   const [speeds, setSpeeds] = useState([
     { value: '', text: 'افتراضية' },
     { value: '1M/2M', text: 'متوسطة' }
@@ -52,14 +44,11 @@ function App() {
     { type: 'text', title: 'عنوان الإعلان', text: 'نص الإعلان الهام للشبكة' }
   ]);
 
-  // 4. إدارة الصور
   const [adsList, setAdsList] = useState(['img/logo.jpg']);
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [activeTab, setActiveTab] = useState('editor');
-  const [loading, setLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
 
-  // اختيار وتنسيق الصور
   const handleImageChange = (e) => {
     const files = Array.from(e.target.files);
     if (!files.length) return;
@@ -78,6 +67,7 @@ function App() {
 
     setAdsList((prev) => [...prev, ...newAds]);
     setSelectedFiles((prev) => [...prev, ...newFiles]);
+    setStatusMsg('✅ تم تجهيز الصور بنجاح، يرجى حفظ ملف الـ config وتحميل الصور المرفقة يدوياً عبر WinBox.');
   };
 
   const handleRemoveImage = (index) => {
@@ -85,16 +75,15 @@ function App() {
     setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
-  // توليد ملف config.js متوافق مع v6 و v7
   const generateConfigJS = () => {
     return `var h_login_settings = {
     "mode": "${config.mode}",
-    "enableSpeeds": ${config.enableSpeeds},
-    "chapEnabled": ${config.chapEnabled},
-    "forceSpeedSelection": ${config.forceSpeedSelection},
-    "updatesEnable": ${config.updatesEnable},
+    "enableSpeeds": true,
+    "chapEnabled": false,
+    "forceSpeedSelection": false,
+    "updatesEnable": true,
     "theme": "${config.theme}",
-    "announcementsEnabled": ${config.announcementsEnabled},
+    "announcementsEnabled": true,
     "announcements": ${JSON.stringify(announcements, null, 8)}
 };
 var ros_version = "${config.rosVersion}";
@@ -118,7 +107,6 @@ var ui_config = {
 };`;
   };
 
-  // تنزيل ملف config.js محلياً (كخيار احتياطي لـ ROS v6 في حال عدم استخدام REST API)
   const downloadConfigJS = () => {
     const element = document.createElement("a");
     const file = new Blob([generateConfigJS()], { type: 'text/plain;charset=utf-8' });
@@ -127,186 +115,203 @@ var ui_config = {
     document.body.appendChild(element);
     element.click();
     document.body.removeChild(element);
-  };
-
-  // 🚀 دالة الاتصال الموحدة للنسختين v6 و v7
-  const handleDeployUnified = async () => {
-    setLoading(true);
-    setStatusMsg(`⌛ جاري بدء الاتصال بشركة RouterOS v${config.rosVersion}...`);
-    
-    const credentials = btoa(`${connection.username}:${connection.password}`);
-    const cleanPath = connection.path.replace(/^\/+|\/+$/g, '');
-    const apiBaseUrl = `http://${connection.ip}:${connection.port}/rest/file`;
-
-    try {
-      // 1. رفع الصور
-      for (let i = 0; i < selectedFiles.length; i++) {
-        const item = selectedFiles[i];
-        setStatusMsg(`⌛ جاري رفع الصورة (${i + 1}/${selectedFiles.length}): ${item.file.name}...`);
-
-        const fileBuffer = await item.file.arrayBuffer();
-        const fileTargetUrl = `${apiBaseUrl}/${cleanPath}/${item.internalPath}`;
-
-        const imgResponse = await fetch(fileTargetUrl, {
-          method: 'PUT',
-          headers: {
-            'Authorization': `Basic ${credentials}`,
-            'Content-Type': 'application/octet-stream'
-          },
-          body: fileBuffer
-        });
-
-        if (!imgResponse.ok) {
-          if (imgResponse.status === 404 && config.rosVersion === '6') {
-            throw new Error(`إصدار v6 لا يدعم REST API المباشرة عبر HTTP. استخدم زر "تحميل config.js" ورفعه عبر WinBox/FTP.`);
-          }
-          throw new Error(`فشل رفع الصورة ${item.file.name} - الرمز: ${imgResponse.status}`);
-        }
-      }
-
-      // 2. رفع واستبدال ملف config.js
-      setStatusMsg('⌛ جاري رفع واستبدال config.js...');
-      const configJSContent = generateConfigJS();
-      const configTargetUrl = `${apiBaseUrl}/${cleanPath}/js/config.js`;
-
-      const configResponse = await fetch(configTargetUrl, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Basic ${credentials}`,
-          'Content-Type': 'text/plain; charset=utf-8'
-        },
-        body: configJSContent
-      });
-
-      if (!configResponse.ok) {
-        throw new Error(`فشل تحديث ملف config.js - الرمز: ${configResponse.status}`);
-      }
-
-      setStatusMsg('✅ تم رفع جميع البيانات وتحديث الراوتر بنجاح!');
-      alert('✅ تم الرفع والمزامنة المباشرة بنجاح!');
-    } catch (err) {
-      console.error(err);
-      let errorMessage = err.message;
-      if (err.name === 'TypeError' && err.message.includes('Failed to fetch')) {
-        errorMessage = 'تعذر الاتصال بالراوتر! تحقق من تفعيل خدمة WWW وقيود المتصفح CORS.';
-      }
-      setStatusMsg(`❌ خطأ: ${errorMessage}`);
-      alert(`❌ خطأ: ${errorMessage}`);
-    } finally {
-      setLoading(false);
-    }
+    setStatusMsg('💾 تم تحميل ملف config.js بنجاح على جهازك!');
   };
 
   return (
-    <div className="app-container" style={{ direction: 'rtl', padding: '15px' }}>
-      <header className="app-header">
-        <h1>⚙️ لوحة تحكم HashTik للميكروتك (v6 / v7)</h1>
-        <div className="tab-buttons">
-          <button className={activeTab === 'editor' ? 'active' : ''} onClick={() => setActiveTab('editor')}>
-            الواجهة الإدارية
+    <div style={{
+      direction: 'rtl',
+      minHeight: '100vh',
+      background: '#090d16',
+      color: '#f8fafc',
+      fontFamily: 'system-ui, -apple-system, sans-serif',
+      padding: '20px'
+    }}>
+      {/* الهيدر الاحترافي */}
+      <header style={{
+        maxWidth: '900px',
+        margin: '0 auto 25px auto',
+        background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
+        border: '1px solid #334155',
+        borderRadius: '16px',
+        padding: '20px 30px',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.3)'
+      }}>
+        <div>
+          <h1 style={{ margin: 0, fontSize: '1.4rem', color: '#38bdf8' }}>⚙️ لوحة تحكم HashTik</h1>
+          <p style={{ margin: '5px 0 0 0', fontSize: '0.85rem', color: '#94a3b8' }}>إدارة هوتسبوت المايكروتك (v6 / v7)</p>
+        </div>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button 
+            onClick={() => setActiveTab('editor')}
+            style={{
+              background: activeTab === 'editor' ? '#0284c7' : '#1e293b',
+              color: '#fff', border: '1px solid #475569', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', transition: '0.2s'
+            }}>
+            🛠️ لوحة الإعدادات
           </button>
-          <button className={activeTab === 'preview' ? 'active' : ''} onClick={() => setActiveTab('preview')}>
-            معاينة config.js
+          <button 
+            onClick={() => setActiveTab('preview')}
+            style={{
+              background: activeTab === 'preview' ? '#0284c7' : '#1e293b',
+              color: '#fff', border: '1px solid #475569', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', transition: '0.2s'
+            }}>
+            📄 معاينة الملف
           </button>
         </div>
       </header>
 
-      {activeTab === 'editor' ? (
-        <main className="main-content">
-          {/* إعدادات الاتصال والنسخة */}
-          <section className="card">
-            <h2>🔌 إعدادات الاتصال والنسخة</h2>
-            <div className="grid-2">
-              <div>
-                <label>إصدار RouterOS:</label>
-                <select 
-                  value={config.rosVersion} 
-                  onChange={(e) => setConfig({ ...config, rosVersion: e.target.value })}
-                  style={{ width: '100%', padding: '8px', marginTop: '5px' }}
-                >
-                  <option value="7">RouterOS v7 (دعم REST API مباشر)</option>
-                  <option value="6">RouterOS v6 (عبر FTP / API Proxy / تنزيل يدوياً)</option>
-                </select>
+      <main style={{ maxWidth: '900px', margin: '0 auto' }}>
+        {activeTab === 'editor' ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            
+            {/* كارت الاتصال */}
+            <div style={{ background: '#111827', border: '1px solid #1f2937', borderRadius: '14px', padding: '20px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
+              <h2 style={{ fontSize: '1.1rem', color: '#38bdf8', marginTop: 0, marginBottom: '15px' }}>🔌 إعدادات الاتصال والمسار</h2>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '15px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '5px', color: '#94a3b8' }}>إصدار الراوتر:</label>
+                  <select 
+                    value={config.rosVersion} 
+                    onChange={(e) => setConfig({ ...config, rosVersion: e.target.value })}
+                    style={{ width: '100%', padding: '10px', background: '#1f2937', color: '#fff', border: '1px solid #374151', borderRadius: '8px' }}
+                  >
+                    <option value="7">RouterOS v7</option>
+                    <option value="6">RouterOS v6</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '5px', color: '#94a3b8' }}>مسار الهوتسبوت في الراوتر:</label>
+                  <input 
+                    type="text" 
+                    value={connection.path} 
+                    onChange={(e) => setConnection({ ...connection, path: e.target.value })} 
+                    style={{ width: '100%', padding: '10px', background: '#1f2937', color: '#fff', border: '1px solid #374151', borderRadius: '8px', boxSizing: 'border-box' }}
+                  />
+                </div>
               </div>
-              <div>
-                <label>مسار الهوتسبوت:</label>
+            </div>
+
+            {/* كارت إعدادات الواجهة والشبكة */}
+            <div style={{ background: '#111827', border: '1px solid #1f2937', borderRadius: '14px', padding: '20px' }}>
+              <h2 style={{ fontSize: '1.1rem', color: '#38bdf8', marginTop: 0, marginBottom: '15px' }}>🌐 بيانات الشبكة والواجهة</h2>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 <input 
                   type="text" 
-                  placeholder="مثال: flash/hotspot أو hotspot" 
-                  value={connection.path} 
-                  onChange={(e) => setConnection({ ...connection, path: e.target.value })} 
+                  placeholder="اسم الشبكة" 
+                  value={config.networkName} 
+                  onChange={(e) => setConfig({ ...config, networkName: e.target.value })}
+                  style={{ width: '100%', padding: '10px', background: '#1f2937', color: '#fff', border: '1px solid #374151', borderRadius: '8px', boxSizing: 'border-box' }}
                 />
+                <textarea 
+                  placeholder="نص الترحيب" 
+                  value={config.welcomeText} 
+                  onChange={(e) => setConfig({ ...config, welcomeText: e.target.value })}
+                  style={{ width: '100%', padding: '10px', background: '#1f2937', color: '#fff', border: '1px solid #374151', borderRadius: '8px', height: '70px', boxSizing: 'border-box' }}
+                />
+                <input 
+                  type="text" 
+                  placeholder="نص الآية أو الحكمة" 
+                  value={config.verseText} 
+                  onChange={(e) => setConfig({ ...config, verseText: e.target.value })}
+                  style={{ width: '100%', padding: '10px', background: '#1f2937', color: '#fff', border: '1px solid #374151', borderRadius: '8px', boxSizing: 'border-box' }}
+                />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                  <input 
+                    type="text" 
+                    placeholder="رقم واتساب الإدارة" 
+                    value={config.adminWhatsApp} 
+                    onChange={(e) => setConfig({ ...config, adminWhatsApp: e.target.value })}
+                    style={{ width: '100%', padding: '10px', background: '#1f2937', color: '#fff', border: '1px solid #374151', borderRadius: '8px', boxSizing: 'border-box' }}
+                  />
+                  <input 
+                    type="text" 
+                    placeholder="رقم الموزع" 
+                    value={config.distributorWhatsApp} 
+                    onChange={(e) => setConfig({ ...config, distributorWhatsApp: e.target.value })}
+                    style={{ width: '100%', padding: '10px', background: '#1f2937', color: '#fff', border: '1px solid #374151', borderRadius: '8px', boxSizing: 'border-box' }}
+                  />
+                </div>
               </div>
             </div>
 
-            <div className="grid-2" style={{ marginTop: '10px' }}>
-              <input type="text" placeholder="IP / الكلاود" value={connection.ip} onChange={(e) => setConnection({ ...connection, ip: e.target.value })} />
-              <input type="text" placeholder="البورت (Default: 80)" value={connection.port} onChange={(e) => setConnection({ ...connection, port: e.target.value })} />
+            {/* كارت الصور */}
+            <div style={{ background: '#111827', border: '1px solid #1f2937', borderRadius: '14px', padding: '20px' }}>
+              <h2 style={{ fontSize: '1.1rem', color: '#38bdf8', marginTop: 0, marginBottom: '15px' }}>🖼️ صور والإعلانات</h2>
+              <label style={{
+                display: 'inline-block',
+                background: '#1e293b',
+                border: '1px dashed #38bdf8',
+                padding: '12px 20px',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                color: '#38bdf8',
+                fontWeight: 'bold',
+                textAlign: 'center'
+              }}>
+                📁 اختر صور الإعلانات والـ Logo
+                <input type="file" multiple accept="image/*" onChange={handleImageChange} hidden />
+              </label>
+
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '15px' }}>
+                {selectedFiles.map((item, index) => (
+                  <div key={index} style={{ position: 'relative', background: '#1f2937', padding: '8px', borderRadius: '8px', border: '1px solid #374151' }}>
+                    <img src={item.previewUrl} alt="preview" style={{ width: '70px', height: '70px', objectFit: 'cover', borderRadius: '6px', display: 'block' }} />
+                    <button onClick={() => handleRemoveImage(index)} style={{ position: 'absolute', top: '-5px', left: '-5px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '50%', width: '22px', height: '22px', cursor: 'pointer', fontSize: '12px' }}>✕</button>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="grid-2">
-              <input type="text" placeholder="اسم المستخدم" value={connection.username} onChange={(e) => setConnection({ ...connection, username: e.target.value })} />
-              <input type="password" placeholder="كلمة السر" value={connection.password} onChange={(e) => setConnection({ ...connection, password: e.target.value })} />
-            </div>
-          </section>
 
-          {/* الإعدادات الأساسية */}
-          <section className="card">
-            <h2>⚙️ إعدادات الواجهة</h2>
-            <input type="text" placeholder="اسم الشبكة" value={config.networkName} onChange={(e) => setConfig({ ...config, networkName: e.target.value })} />
-            <textarea placeholder="نص الترحيب" value={config.welcomeText} onChange={(e) => setConfig({ ...config, welcomeText: e.target.value })} />
-            <input type="text" placeholder="نص الآية/الحكمة" value={config.verseText} onChange={(e) => setConfig({ ...config, verseText: e.target.value })} />
-            
-            <div className="grid-2">
-              <input type="text" placeholder="رقم واتساب الإدارة" value={config.adminWhatsApp} onChange={(e) => setConfig({ ...config, adminWhatsApp: e.target.value })} />
-              <input type="text" placeholder="رقم الموزع" value={config.distributorWhatsApp} onChange={(e) => setConfig({ ...config, distributorWhatsApp: e.target.value })} />
-            </div>
-          </section>
+            {/* شريط الإشعارات والحالة */}
+            {statusMsg && (
+              <div style={{ padding: '12px 15px', background: '#064e3b', border: '1px solid #059669', borderRadius: '8px', color: '#34d399', fontSize: '0.9rem' }}>
+                {statusMsg}
+              </div>
+            )}
 
-          {/* الصور */}
-          <section className="card">
-            <h2>🖼️ الصور والإعلانات</h2>
-            <label className="file-upload-btn">
-              📁 اختيار صور
-              <input type="file" multiple accept="image/*" onChange={handleImageChange} hidden />
-            </label>
-
-            <div className="image-grid">
-              {selectedFiles.map((item, index) => (
-                <div key={index} className="image-card">
-                  <img src={item.previewUrl} alt={`ad-${index}`} style={{ width: '80px', height: '80px', objectFit: 'cover' }} />
-                  <span className="path-tag">{item.internalPath}</span>
-                  <button className="delete-btn" onClick={() => handleRemoveImage(index)}>✕</button>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          {/* شريط الحالة */}
-          {statusMsg && <div style={{ padding: '12px', background: '#1e293b', borderRadius: '8px', marginBottom: '15px', color: '#00f3ff' }}>{statusMsg}</div>}
-
-          {/* أزرار العمليات */}
-          <div style={{ display: 'flex', gap: '10px' }}>
-            <button className="deploy-btn" onClick={handleDeployUnified} disabled={loading} style={{ flex: 2 }}>
-              {loading ? 'جاري الرفع...' : '🚀 رفع مباشر للراوتر (REST API)'}
+            {/* زر التنزيل الآمن */}
+            <button 
+              onClick={downloadConfigJS}
+              style={{
+                background: 'linear-gradient(135deg, #0ea5e9 0%, #0369a1 100%)',
+                color: '#fff',
+                border: 'none',
+                padding: '14px',
+                borderRadius: '10px',
+                fontSize: '1rem',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                boxShadow: '0 4px 12px rgba(14, 165, 233, 0.3)',
+                transition: '0.2s'
+              }}
+            >
+              💾 تحميل ملف config.js المحدث (لرفعه عبر WinBox)
             </button>
 
-            <button className="download-btn" onClick={downloadConfigJS} type="button" style={{ flex: 1, background: '#334155', color: '#fff', borderRadius: '8px', cursor: 'pointer' }}>
-              💾 تحميل config.js يدوياً
-            </button>
           </div>
-        </main>
-      ) : (
-        <main className="main-content">
-          <section className="card">
-            <h2>📄 معاينة config.js المولد</h2>
-            <pre className="code-preview" style={{ direction: 'ltr', textAlign: 'left', background: '#0b0d14', padding: '15px', borderRadius: '8px', overflowX: 'auto' }}>
+        ) : (
+          <div style={{ background: '#111827', border: '1px solid #1f2937', borderRadius: '14px', padding: '20px' }}>
+            <h2 style={{ fontSize: '1.1rem', color: '#38bdf8', marginTop: 0, marginBottom: '15px' }}>📄 معاينة الكود النهائي</h2>
+            <pre style={{
+              direction: 'ltr',
+              textAlign: 'left',
+              background: '#030712',
+              padding: '15px',
+              borderRadius: '8px',
+              overflowX: 'auto',
+              color: '#34d399',
+              fontSize: '0.85rem',
+              border: '1px solid #1f2937'
+            }}>
               {generateConfigJS()}
             </pre>
-          </section>
-        </main>
-      )}
+          </div>
+        )}
+      </main>
     </div>
   );
 }
-
-export default App;
